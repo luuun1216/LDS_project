@@ -11,9 +11,9 @@ import generate_numbers
 import threading
 import time
 import queue
-
+from collections import deque
 # 0829_TODO_list 
-# 1. Add two button for "save pic" and "save video"
+# "V" 1. Add two button for "save pic" and "save video"
 #   - for save pic
 #       - after click the button, the sys will show a sub_windows, this sub_window will 
 #         have a button call "save", and let user to name the pic
@@ -22,19 +22,23 @@ import queue
 #         have a button call "save", and let user to name the video
 #       - And the sys will save current frame to next 50 frame(defult)
 #       - 50 frame can let user to set , but in the config 
-# 2. Add two arrow
+# "V" 2. Add two arrow
 #   - these two arrow can let user to add or sub three frame (like youtube)
-# 3. We need to do screenshot when the event list add the new event, like the auto save for each video.
+# "V" 3. We need to do screenshot when the event list add the new event, like the auto save for each video.
 
 
 # 0905_TODO_list
-# 1. auto save function need to add new funciton : when the event list been activate, sys need to save the pic ,for example, when we need save
+# "V" 1. auto save function need to add new funciton : when the event list been activate, sys need to save the pic ,for example, when we need save
 # the no.50 frame , we also need to save 55 and 45 
-# 2. text size adjust
-# 3. Add the batch proceess for system. For example, we can load 5 video at the same time, (we can load all the video in the folder)
-# 4. Add new function for watch video which Has been completed (load video and txt , and we can see the whole result of this video)
+# "V" 2. text size adjust
 
 
+# 0908_TODO_list
+# 1. split the sys , that means the right hand side function adn left hand side are depency.
+# 2. Add the batch proceess for system. For example, we can load 5 video at the same time, (we can load all the video in the folder)
+# 3. Add new function for watch video which Has been completed (load video and txt , and we can see the whole result of this video)
+
+ 
 
 # specify your image folder
 image_folder = '.'
@@ -68,7 +72,10 @@ class Ui_MainWindow(object):
     def setupUi(self, MainWindow):
         MainWindow.setObjectName("MainWindow")
         MainWindow.resize(1211, 877)
-        
+        # MainWindow.setStyleSheet("QLabel{font-size: 10pt;}")
+        # app = QtWidgets.QApplication([])
+        MainWindow.setStyleSheet("QLabel { font-size: 16px; } QPushButton { font-size: 16px; }")
+
         self.centralwidget = QtWidgets.QWidget(MainWindow)
         self.centralwidget.setObjectName("centralwidget")
         self.label_videoframe = QtWidgets.QLabel(self.centralwidget)
@@ -78,7 +85,7 @@ class Ui_MainWindow(object):
 
          # add a button to select video
         self.open_button = QtWidgets.QPushButton("Open video", self.centralwidget)
-        self.open_button.setGeometry(QtCore.QRect(20, 550, 113, 32))  # set button size and location
+        self.open_button.setGeometry(QtCore.QRect(20, 550, 125, 35))  # set button size and location
         self.open_button.clicked.connect(MainWindow.open_file)  # connect button to open_file function
 
         self.slider_videoframe = QtWidgets.QSlider(self.centralwidget)
@@ -88,17 +95,17 @@ class Ui_MainWindow(object):
 
         # Add Start Button
         self.start_button = QtWidgets.QPushButton("Start", self.centralwidget)
-        self.start_button.setGeometry(QtCore.QRect(140, 600, 113, 32))
+        self.start_button.setGeometry(QtCore.QRect(140, 600, 125, 32))
         self.start_button.clicked.connect(MainWindow.start_video)
 
         # Add Pause Button
         self.pause_button = QtWidgets.QPushButton("Pause", self.centralwidget)
-        self.pause_button.setGeometry(QtCore.QRect(260, 600, 113, 32))
+        self.pause_button.setGeometry(QtCore.QRect(280, 600, 125, 32))
         self.pause_button.clicked.connect(MainWindow.pause_video)
 
         # Add Stop Button
         self.stop_button = QtWidgets.QPushButton("Stop", self.centralwidget)
-        self.stop_button.setGeometry(QtCore.QRect(380, 600, 113, 32))
+        self.stop_button.setGeometry(QtCore.QRect(420, 600, 125, 32))
         self.stop_button.clicked.connect(MainWindow.stop_video)
 
         # Assuming this is part of your Ui_MainWindow setupUi function:
@@ -116,18 +123,18 @@ class Ui_MainWindow(object):
 
         # Assuming this is part of your Ui_MainWindow setupUi function:
         self.button_save = QtWidgets.QPushButton(self.centralwidget)
-        self.button_save.setGeometry(QtCore.QRect(600, 700, 80, 30))  # adjust the coordinates and size as needed
+        self.button_save.setGeometry(QtCore.QRect(500, 700, 125, 35))  # adjust the coordinates and size as needed
         self.button_save.setText("Save pic")
         self.button_save.setObjectName("button_save")
         # Connect the signals to slots (functions)
         self.button_save.clicked.connect(self.save_current_frame)
 
         self.save_video_btn = QtWidgets.QPushButton("Save Video", self.centralwidget)
-        self.save_video_btn.setGeometry(QtCore.QRect(700, 700, 80, 30))  # set button size and location
+        self.save_video_btn.setGeometry(QtCore.QRect(700, 700, 125, 35))  # set button size and location
         self.save_video_btn.clicked.connect(self.save_video_segment)
 
         self.label_framecnt = QtWidgets.QLabel(self.centralwidget)
-        self.label_framecnt.setGeometry(QtCore.QRect(700, 560, 171, 21))
+        self.label_framecnt.setGeometry(QtCore.QRect(700, 560, 250, 25))
         self.label_framecnt.setObjectName("label_framecnt")
         
         self.label_filepath = QtWidgets.QLabel(self.centralwidget)
@@ -249,6 +256,29 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow, newWindow):
         self.video_total_frame_count = 0
         self.frame_count = 0
         self.slider_videoframe.valueChanged.connect(self.slider_changed)
+        # Initialize the deque with a max length of 6 (current frame + 5 previous frames)
+        self.frame_buffer = deque(maxlen=6)
+         # Add a timer for the event list processing
+        self.event_processing_timer = QtCore.QTimer(self)
+        self.event_processing_timer.timeout.connect(self.simulate_event_processing)
+        # New member variable to track frame count for event processing
+        self.event_frame_count = 0
+    def simulate_event_processing(self):
+        """Simulate the frame-by-frame event processing."""
+        self.event_frame_count += 1
+
+        # Stop the QTimer if event_frame_count exceeds the total frame count
+        if self.event_frame_count >= self.video_total_frame_count:
+            self.event_processing_timer.stop()
+            return
+
+        if self.event_frame_count % button_interval == 0:
+
+            eventframe_height = self.topFiller.height()
+            # This is your simulated frame processing.
+            self.add_timestamp(int(self.event_frame_count / button_interval), self, eventframe_height)
+            # You can include the logic for saving frames here too, if desired.
+
     def timerEvent(self, event):
         if event.timerId() != self.timer_id or self.cap is None:
             return
@@ -262,14 +292,21 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow, newWindow):
             self.show_frame(frame)
             self.idx += 1
             # print(self.idx)
-            eventframe_height = self.topFiller.height()
+            # eventframe_height = self.topFiller.height()
+
+            self.frame_buffer.append(frame)
+
             if(self.frame_count%button_interval == 0):
-                self.add_timestamp(int(self.frame_count/button_interval), self, eventframe_height)
+                # self.add_timestamp(int(self.frame_count/button_interval), self, eventframe_height)
                 
                 # Save frame after adding the timestamp
                 file_path = os.path.join('pic_temp', f'frame_{self.frame_count}.png')
-                
                 cv2.imwrite(file_path, self.current_frame)
+
+                 # Save the frame 5 frames back, if it exists in the buffer
+                if len(self.frame_buffer) == 6:  # Ensuring we have enough frames in the buffer
+                    file_path_minus_5 = os.path.join('pic_temp', f'frame_{self.frame_count - 5}.png')
+                    cv2.imwrite(file_path_minus_5, self.frame_buffer[0])  # The 0th index will have the frame 5 frames back
 
             self.frame_count += 1
             # frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
@@ -283,11 +320,17 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow, newWindow):
             #                                               QtCore.Qt.KeepAspectRatio))
             self.slider_videoframe.setValue(self.current_frame_no)
         else:
-            self.killTimer(self.timer_id)  # if no more frames, stop the timer
-            self.cap.release()
-            self.cap = None
-            # print(f)
-            self.stop_video()
+            # self.killTimer(self.timer_id)  # if no more frames, stop the timer
+            # self.cap.release()
+            # self.cap = None
+            # # print(f)
+            # self.stop_video()
+            if self.timer_id:
+                self.killTimer(self.timer_id)
+                self.timer_id = None  # Set timer_id to None after killing the timer
+                self.cap.release()
+                self.cap = None
+                self.stop_video()
 
     # function to open file
     def open_file(self):
@@ -302,6 +345,7 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow, newWindow):
         result_queue = queue.Queue()
         current_iteration = 1
         total_iterations = 1
+        self.event_processing_timer.start(1000 // 30)  
         while current_iteration <= total_iterations:
             end = current_iteration * 10
             thread = threading.Thread(target=generate_numbers.print_numbers, args=(end - 9, end, result_queue))
@@ -371,7 +415,8 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow, newWindow):
         self.label_videoframe.clear()
         self.current_frame_no = 0
         self.label_framecnt.setText(f"frame number: {self.current_frame_no}/{self.video_total_frame_count}")
-
+        self.event_processing_timer.stop()
+        self.event_frame_count = 0
     def slider_changed(self):
         if self.cap:
             frame_no = self.slider_videoframe.value()
