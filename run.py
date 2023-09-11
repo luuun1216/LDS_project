@@ -258,11 +258,14 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow, newWindow):
         self.slider_videoframe.valueChanged.connect(self.slider_changed)
         # Initialize the deque with a max length of 6 (current frame + 5 previous frames)
         self.frame_buffer = deque(maxlen=6)
-         # Add a timer for the event list processing
+        # Add a timer for the event list processing
         self.event_processing_timer = QtCore.QTimer(self)
         self.event_processing_timer.timeout.connect(self.simulate_event_processing)
         # New member variable to track frame count for event processing
         self.event_frame_count = 0
+
+        self.video_paths = []  # list of video paths
+        self.current_video_index = -1  # index to track the currently processed video
     def simulate_event_processing(self):
         """Simulate the frame-by-frame event processing."""
         self.event_frame_count += 1
@@ -325,17 +328,22 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow, newWindow):
             # self.cap = None
             # # print(f)
             # self.stop_video()
-            if self.timer_id:
-                self.killTimer(self.timer_id)
-                self.timer_id = None  # Set timer_id to None after killing the timer
-                self.cap.release()
-                self.cap = None
-                self.stop_video()
+            self.process_next_video()
+            # if self.timer_id:
+            #     self.killTimer(self.timer_id)
+            #     self.timer_id = None  # Set timer_id to None after killing the timer
+            #     self.cap.release()
+            #     self.cap = None
+            #     self.stop_video()
 
     # function to open file
     def open_file(self):
         
-        self.video_path, _ = QFileDialog.getOpenFileName(self, "Select Video File", "", "Videos (*.mp4 *.avi *.flv *.mkv)")
+        # self.video_path, _ = QFileDialog.getOpenFileName(self, "Select Video File", "", "Videos (*.mp4 *.avi *.flv *.mkv)")
+        folder_path = QFileDialog.getExistingDirectory(self, "Select Video Folder")
+        # Collect all video files from the folder
+        video_files = [f for f in os.listdir(folder_path) if f.endswith(('.mp4', '.avi', '.flv', '.mkv'))]
+        self.video_paths = [os.path.join(folder_path, f) for f in video_files]
         self.progressBar.show() 
         
         ########## 0820 ##########
@@ -359,7 +367,12 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow, newWindow):
         ########## 0820 ##########
         self.progressBar.hide()
 
+        self.current_video_index = -1
+        self.process_next_video()
+        
+
         if self.video_path:
+            
             # Display the chosen file path in the label
             self.label_filepath.setText(self.video_path)
             if self.cap:
@@ -371,6 +384,39 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow, newWindow):
             if self.timer_id is not None:
                 self.killTimer(self.timer_id)
             self.timer_id = self.startTimer(1000//30)  # start a new timer and keep its ID
+
+    def process_next_video(self):
+        # Check if we have videos left to process
+        if self.current_video_index + 1 < len(self.video_paths):
+            self.current_video_index += 1
+            self.video_path = self.video_paths[self.current_video_index]
+            self.label_filepath.setText(self.video_path)  # Display the current video path
+            
+            if self.cap:
+                self.cap.release()
+            
+            self.cap = cv2.VideoCapture(self.video_path)
+            self.video_total_frame_count = int(self.cap.get(cv2.CAP_PROP_FRAME_COUNT))
+            self.slider_videoframe.setMaximum(self.video_total_frame_count - 1)
+            
+            if self.timer_id is not None:
+                self.killTimer(self.timer_id)
+            
+            self.timer_id = self.startTimer(1000 // 30)
+            self.current_frame_no = 0
+             # 1. Remove existing QPushButtons from self.topFiller.
+            for child in self.topFiller.children():
+                if isinstance(child, QtWidgets.QPushButton) and child.objectName() == 'button':
+                    child.deleteLater()  # Removes the button.
+            # 2. Reset necessary variables or state.
+            eventframe_height = self.topFiller.height()  # Replace with the initial value.
+            self.event_frame_count = 0  # Reset for new video.
+             # 3. Start the event processing for the new video.
+            self.simulate_event_processing()
+        else:
+            # Maybe show a message here that all videos have been processed
+            pass
+
 
     def click_timestamp_button(self, num):
         # print("click timestamp button", num)
