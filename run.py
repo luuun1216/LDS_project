@@ -34,9 +34,24 @@ from collections import deque
 
 
 # 0908_TODO_list
-# 1. split the sys , that means the right hand side function adn left hand side are depency.
-# 2. Add the batch proceess for system. For example, we can load 5 video at the same time, (we can load all the video in the folder)
-# 3. Add new function for watch video which Has been completed (load video and txt , and we can see the whole result of this video)
+# "V"  1. split the sys , that means the right hand side function adn left hand side are depency.
+# "V"  2. Add the batch proceess for system. For example, we can load 5 video at the same time, (we can load all the video in the folder)
+
+
+# 0912_TODO_list
+# "V" 1. fix the some critical bug
+#   - When the system switch to next video, the auto save got wrong file name.
+#       - we also need to spilt the folder for saving the pic, for example, if we have two video, we need to craete two sub folder to save the pic.
+#   - When the system switch to next video, the button (event simulate) didnt work correctly
+# "V" 2. Add new function for saving the event list result (txt)
+
+#0919_TODO_list
+# 1. Add new function for watching completed video (load video and txt , and we can see the whole result of this video)
+#   - using bar component in pyqt, in this component , user can swithc two fnction , run mode and viewer mode.
+# 2. fix the some critical bug
+#   - when we start the sys again, the sys will start to record the enevt list txt, but the txt didnt reset every time , 
+#     so the txt always have the last time record and then add this time record in the back of it.
+# 3. Add the proccess bar for the tracking
 
  
 
@@ -83,7 +98,7 @@ class Ui_MainWindow(object):
         self.label_videoframe.setFrameShape(QtWidgets.QFrame.WinPanel)
         self.label_videoframe.setObjectName("label_videoframe")
 
-         # add a button to select video
+        # add a button to select video
         self.open_button = QtWidgets.QPushButton("Open video", self.centralwidget)
         self.open_button.setGeometry(QtCore.QRect(20, 550, 125, 35))  # set button size and location
         self.open_button.clicked.connect(MainWindow.open_file)  # connect button to open_file function
@@ -123,14 +138,14 @@ class Ui_MainWindow(object):
 
         # Assuming this is part of your Ui_MainWindow setupUi function:
         self.button_save = QtWidgets.QPushButton(self.centralwidget)
-        self.button_save.setGeometry(QtCore.QRect(500, 700, 125, 35))  # adjust the coordinates and size as needed
+        self.button_save.setGeometry(QtCore.QRect(500, 750, 125, 35))  # adjust the coordinates and size as needed
         self.button_save.setText("Save pic")
         self.button_save.setObjectName("button_save")
         # Connect the signals to slots (functions)
         self.button_save.clicked.connect(self.save_current_frame)
 
         self.save_video_btn = QtWidgets.QPushButton("Save Video", self.centralwidget)
-        self.save_video_btn.setGeometry(QtCore.QRect(700, 700, 125, 35))  # set button size and location
+        self.save_video_btn.setGeometry(QtCore.QRect(700, 750, 125, 35))  # set button size and location
         self.save_video_btn.clicked.connect(self.save_video_segment)
 
         self.label_framecnt = QtWidgets.QLabel(self.centralwidget)
@@ -160,6 +175,12 @@ class Ui_MainWindow(object):
         self.progressBar.setProperty("value", 0)
         self.progressBar.setObjectName("progressBar")
         self.progressBar.hide()
+        
+        self.progressBar_event = QtWidgets.QProgressBar(self.centralwidget)
+        self.progressBar_event.setGeometry(QtCore.QRect(140, 700, 300, 25))
+        self.progressBar_event.setProperty("value", 0)
+        self.progressBar_event.setObjectName("progressBar_event")
+        self.progressBar_event.hide()
         
         MainWindow.setCentralWidget(self.centralwidget)
 
@@ -258,11 +279,26 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow, newWindow):
         self.slider_videoframe.valueChanged.connect(self.slider_changed)
         # Initialize the deque with a max length of 6 (current frame + 5 previous frames)
         self.frame_buffer = deque(maxlen=6)
-         # Add a timer for the event list processing
+        # Add a timer for the event list processing
         self.event_processing_timer = QtCore.QTimer(self)
         self.event_processing_timer.timeout.connect(self.simulate_event_processing)
         # New member variable to track frame count for event processing
         self.event_frame_count = 0
+
+        self.video_paths = []  # list of video paths
+        self.current_video_index = -1  # index to track the currently processed video
+    def write_event_to_file(self, frame_no):
+        """Writes the frame number to a text file"""
+        video_name = os.path.basename(self.video_path)  # Get the filename, like "video.mp4"
+        video_name_without_ext = os.path.splitext(video_name)[0]  # Get "video" from "video.mp4"
+        
+        # Determine path for the text file - saved in the video directory
+        txt_file_path = os.path.join('pic_temp', video_name_without_ext, 'events.txt')
+        
+        # Open the file in append mode and write the frame number
+        with open(txt_file_path, 'a') as file:
+            file.write(f"{frame_no}\n")
+            
     def simulate_event_processing(self):
         """Simulate the frame-by-frame event processing."""
         self.event_frame_count += 1
@@ -271,13 +307,15 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow, newWindow):
         if self.event_frame_count >= self.video_total_frame_count:
             self.event_processing_timer.stop()
             return
-
+        
+        print(self.event_frame_count)
         if self.event_frame_count % button_interval == 0:
 
             eventframe_height = self.topFiller.height()
             # This is your simulated frame processing.
             self.add_timestamp(int(self.event_frame_count / button_interval), self, eventframe_height)
-            # You can include the logic for saving frames here too, if desired.
+            # Write the event frame number to a file
+            self.write_event_to_file(self.event_frame_count)
 
     def timerEvent(self, event):
         if event.timerId() != self.timer_id or self.cap is None:
@@ -296,16 +334,26 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow, newWindow):
 
             self.frame_buffer.append(frame)
 
+
+             # Extract video name without extension for directory creation
+            video_name = os.path.basename(self.video_path)  # Get the filename, like "video.mp4"
+            video_name_without_ext = os.path.splitext(video_name)[0]  # Get "video" from "video.mp4"
+            video_dir_path = os.path.join('pic_temp', video_name_without_ext)
+            if not os.path.exists(video_dir_path):
+                os.mkdir(video_dir_path)
+
             if(self.frame_count%button_interval == 0):
                 # self.add_timestamp(int(self.frame_count/button_interval), self, eventframe_height)
                 
                 # Save frame after adding the timestamp
-                file_path = os.path.join('pic_temp', f'frame_{self.frame_count}.png')
+                # file_path = os.path.join('pic_temp', f'frame_{self.frame_count}.png')
+                file_path = os.path.join(video_dir_path, f'frame_{self.frame_count}.png')
                 cv2.imwrite(file_path, self.current_frame)
 
                  # Save the frame 5 frames back, if it exists in the buffer
                 if len(self.frame_buffer) == 6:  # Ensuring we have enough frames in the buffer
-                    file_path_minus_5 = os.path.join('pic_temp', f'frame_{self.frame_count - 5}.png')
+                    # file_path_minus_5 = os.path.join('pic_temp', f'frame_{self.frame_count - 5}.png')
+                    file_path_minus_5 = os.path.join(video_dir_path, f'frame_{self.frame_count - 5}.png')
                     cv2.imwrite(file_path_minus_5, self.frame_buffer[0])  # The 0th index will have the frame 5 frames back
 
             self.frame_count += 1
@@ -325,17 +373,22 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow, newWindow):
             # self.cap = None
             # # print(f)
             # self.stop_video()
-            if self.timer_id:
-                self.killTimer(self.timer_id)
-                self.timer_id = None  # Set timer_id to None after killing the timer
-                self.cap.release()
-                self.cap = None
-                self.stop_video()
+            self.process_next_video()
+            # if self.timer_id:
+            #     self.killTimer(self.timer_id)
+            #     self.timer_id = None  # Set timer_id to None after killing the timer
+            #     self.cap.release()
+            #     self.cap = None
+            #     self.stop_video()
 
     # function to open file
     def open_file(self):
         
-        self.video_path, _ = QFileDialog.getOpenFileName(self, "Select Video File", "", "Videos (*.mp4 *.avi *.flv *.mkv)")
+        # self.video_path, _ = QFileDialog.getOpenFileName(self, "Select Video File", "", "Videos (*.mp4 *.avi *.flv *.mkv)")
+        folder_path = QFileDialog.getExistingDirectory(self, "Select Video Folder")
+        # Collect all video files from the folder
+        video_files = [f for f in os.listdir(folder_path) if f.endswith(('.mp4', '.avi', '.flv', '.mkv'))]
+        self.video_paths = [os.path.join(folder_path, f) for f in video_files]
         self.progressBar.show() 
         
         ########## 0820 ##########
@@ -359,7 +412,12 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow, newWindow):
         ########## 0820 ##########
         self.progressBar.hide()
 
+        self.current_video_index = -1
+        self.process_next_video()
+        
+
         if self.video_path:
+            
             # Display the chosen file path in the label
             self.label_filepath.setText(self.video_path)
             if self.cap:
@@ -371,6 +429,41 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow, newWindow):
             if self.timer_id is not None:
                 self.killTimer(self.timer_id)
             self.timer_id = self.startTimer(1000//30)  # start a new timer and keep its ID
+
+    def process_next_video(self):
+        # Check if we have videos left to process
+        if self.current_video_index + 1 < len(self.video_paths):
+            self.current_video_index += 1
+            self.video_path = self.video_paths[self.current_video_index]
+            self.label_filepath.setText(self.video_path)  # Display the current video path
+            
+            if self.cap:
+                self.cap.release()
+            
+            self.cap = cv2.VideoCapture(self.video_path)
+            self.video_total_frame_count = int(self.cap.get(cv2.CAP_PROP_FRAME_COUNT))
+            self.slider_videoframe.setMaximum(self.video_total_frame_count - 1)
+            
+            if self.timer_id is not None:
+                self.killTimer(self.timer_id)
+            
+            self.timer_id = self.startTimer(1000 // 30)
+            self.current_frame_no = 0
+            
+             # 1. Remove existing QPushButtons from self.topFiller.
+            for child in self.topFiller.children():
+                if isinstance(child, QtWidgets.QPushButton) and child.objectName() == 'button':
+                    child.deleteLater()  # Removes the button.
+            # 2. Reset necessary variables or state.
+            eventframe_height = self.topFiller.height()  # Replace with the initial value.
+            self.frame_count = 0
+            self.event_frame_count = 0  # Reset for new video.
+             # 3. Start the event processing for the new video.
+            self.event_processing_timer.start()
+        else:
+            # Maybe show a message here that all videos have been processed
+            pass
+
 
     def click_timestamp_button(self, num):
         # print("click timestamp button", num)
