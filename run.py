@@ -46,12 +46,12 @@ from collections import deque
 # "V" 2. Add new function for saving the event list result (txt)
 
 #0919_TODO_list
-# 1. Add new function for watching completed video (load video and txt , and we can see the whole result of this video)
-#   - using bar component in pyqt, in this component , user can swithc two fnction , run mode and viewer mode.
-# 2. fix the some critical bug
+# "V" 1. Add new function for watching completed video (load video and txt , and we can see the whole result of this video)
+# "V" 2. Using bar component in pyqt, in this component , user can swithc two fnction , run mode and viewer mode.
+# 3. fix the some critical bug
 #   - when we start the sys again, the sys will start to record the enevt list txt, but the txt didnt reset every time , 
 #     so the txt always have the last time record and then add this time record in the back of it.
-# 3. Add the proccess bar for the tracking
+# 4. Add the proccess bar for the tracking
 
  
 
@@ -98,10 +98,41 @@ class Ui_MainWindow(object):
         self.label_videoframe.setFrameShape(QtWidgets.QFrame.WinPanel)
         self.label_videoframe.setObjectName("label_videoframe")
 
-        # add a button to select video
+        # Create the main menu bar
+        self.menubar = QtWidgets.QMenuBar(MainWindow)
+        self.menubar.setGeometry(QtCore.QRect(0, 0, 800, 21))  # Adjust the size as per your requirements
+        self.menubar.setObjectName("menubar")
+        # Add a 'File' menu to the menu bar
+        self.menuFile = QtWidgets.QMenu(self.menubar)
+        self.menuFile.setObjectName("menuFile")
+        self.menuFile.setTitle("File")
+         # Add an 'Open File' option to the 'File' menu
+        self.actionOpenFile = QtWidgets.QAction(MainWindow)
+        self.actionOpenFile.setObjectName("actionOpenFile")
+        self.actionOpenFile.setText("Open Folder")
+        self.menuFile.addAction(self.actionOpenFile)
+
+        # Add an 'Open Processed Video' option to the 'File' menu
+        self.actionOpenProcessedVideo = QtWidgets.QAction(MainWindow)
+        self.actionOpenProcessedVideo.setObjectName("actionOpenProcessedVideo")
+        self.actionOpenProcessedVideo.setText("Open Processed Video")
+        self.menuFile.addAction(self.actionOpenProcessedVideo)
+
+        # Add the 'File' menu to the menu bar
+        self.menubar.addAction(self.menuFile.menuAction())
+        # Set the menu bar to the main window
+        MainWindow.setMenuBar(self.menubar)
+        # Connect the 'Open File' action to the function
+        self.actionOpenFile.triggered.connect(MainWindow.open_file)
+        # Connect the 'Open Processed Video' action to its function
+        self.actionOpenProcessedVideo.triggered.connect(self.open_processed_video_dialog)
+
+
+        # add a button to select video(already abandoned!!!!)
         self.open_button = QtWidgets.QPushButton("Open video", self.centralwidget)
         self.open_button.setGeometry(QtCore.QRect(20, 550, 125, 35))  # set button size and location
         self.open_button.clicked.connect(MainWindow.open_file)  # connect button to open_file function
+        self.open_button.hide()
 
         self.slider_videoframe = QtWidgets.QSlider(self.centralwidget)
         self.slider_videoframe.setGeometry(QtCore.QRect(150, 560, 531, 22))
@@ -318,6 +349,8 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow, newWindow):
             self.write_event_to_file(self.event_frame_count)
 
     def timerEvent(self, event):
+        
+
         if event.timerId() != self.timer_id or self.cap is None:
             return
 
@@ -335,7 +368,7 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow, newWindow):
             self.frame_buffer.append(frame)
 
 
-             # Extract video name without extension for directory creation
+            # Extract video name without extension for directory creation
             video_name = os.path.basename(self.video_path)  # Get the filename, like "video.mp4"
             video_name_without_ext = os.path.splitext(video_name)[0]  # Get "video" from "video.mp4"
             video_dir_path = os.path.join('pic_temp', video_name_without_ext)
@@ -345,45 +378,28 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow, newWindow):
             if(self.frame_count%button_interval == 0):
                 # self.add_timestamp(int(self.frame_count/button_interval), self, eventframe_height)
                 
-                # Save frame after adding the timestamp
+                # Save frame after adding the timestamp 
                 # file_path = os.path.join('pic_temp', f'frame_{self.frame_count}.png')
                 file_path = os.path.join(video_dir_path, f'frame_{self.frame_count}.png')
                 cv2.imwrite(file_path, self.current_frame)
 
-                 # Save the frame 5 frames back, if it exists in the buffer
+                # Save the frame 5 frames back, if it exists in the buffer
                 if len(self.frame_buffer) == 6:  # Ensuring we have enough frames in the buffer
                     # file_path_minus_5 = os.path.join('pic_temp', f'frame_{self.frame_count - 5}.png')
                     file_path_minus_5 = os.path.join(video_dir_path, f'frame_{self.frame_count - 5}.png')
                     cv2.imwrite(file_path_minus_5, self.frame_buffer[0])  # The 0th index will have the frame 5 frames back
 
             self.frame_count += 1
-            # frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-            # h, w, c = frame.shape
-            # qimg = QtGui.QImage(frame.data, w, h, c*w, QtGui.QImage.Format_RGB888)
-            # pixmap = QtGui.QPixmap.fromImage(qimg)
 
-            # # Scale QPixmap to fit the QLabel size
-            # self.label_videoframe.setPixmap(pixmap.scaled(self.label_videoframe.width(),
-            #                                               self.label_videoframe.height(),
-            #                                               QtCore.Qt.KeepAspectRatio))
             self.slider_videoframe.setValue(self.current_frame_no)
         else:
-            # self.killTimer(self.timer_id)  # if no more frames, stop the timer
-            # self.cap.release()
-            # self.cap = None
-            # # print(f)
-            # self.stop_video()
             self.process_next_video()
-            # if self.timer_id:
-            #     self.killTimer(self.timer_id)
-            #     self.timer_id = None  # Set timer_id to None after killing the timer
-            #     self.cap.release()
-            #     self.cap = None
-            #     self.stop_video()
+        if not self.processed_mode:
+            pass
 
     # function to open file
     def open_file(self):
-        
+        self.processed_mode = False
         # self.video_path, _ = QFileDialog.getOpenFileName(self, "Select Video File", "", "Videos (*.mp4 *.avi *.flv *.mkv)")
         folder_path = QFileDialog.getExistingDirectory(self, "Select Video Folder")
         # Collect all video files from the folder
@@ -587,6 +603,66 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow, newWindow):
         # Launch a new window to display the video frames as GIF
         self.sub_window = newWindow(start_frame, end_frame, frames_to_save)
         self.sub_window.show()
+
+    def open_processed_video_dialog(self):
+        options = QtWidgets.QFileDialog.Options()
+
+        # Select video file
+        videoFilePath, _ = QtWidgets.QFileDialog.getOpenFileName(self, "Open Processed Video File", "", "Video Files (*.mp4 *.avi);;All Files (*)", options=options)
+        
+        if not videoFilePath:
+            return
+        
+        # Select event txt file corresponding to the video
+        txtFilePath, _ = QtWidgets.QFileDialog.getOpenFileName(self, "Open Event TXT File", "", "Text Files (*.txt);;All Files (*)", options=options)
+
+        if not txtFilePath:
+            return
+
+        # Load the video and its events
+        self.load_processed_video(videoFilePath,txtFilePath)
+        # self.load_events_from_txt(txtFilePath)
+
+        # Play the loaded video
+        self.play_processed_video()
+
+
+    def load_processed_video(self, videoFilePath,txtFilePath):
+        print(videoFilePath)
+        print(txtFilePath)
+        # Load the event list
+        with open(txtFilePath, 'r') as file:
+            event_frames = file.readlines()
+        # Add the events to the event list
+        for frame_no in event_frames:
+            frame_no = int(frame_no.strip())  # Convert to integer
+            eventframe_height = self.topFiller.height()
+            self.add_timestamp(int(frame_no / button_interval), self, eventframe_height)
+
+        if self.cap:  # Release the previous video capture if it exists
+            self.cap.release()
+        
+        self.processed_mode = True
+
+        self.video_path = videoFilePath
+
+        self.cap = cv2.VideoCapture(self.video_path)
+        self.video_total_frame_count = int(self.cap.get(cv2.CAP_PROP_FRAME_COUNT))
+        self.slider_videoframe.setMaximum(self.video_total_frame_count - 1)
+
+        # Assuming you might want to reset some other related attributes
+        self.frame_count = 0
+        self.current_frame_no = 0
+        self.frame_buffer.clear()
+
+        # Display the chosen file path in the label
+        # self.label_filepath.setText(self.video_path)
+    def play_processed_video(self):
+        if self.timer_id is not None:
+            self.killTimer(self.timer_id)
+            
+        self.timer_id = self.startTimer(1000 // 30)  # Start a timer to play the video
+
 
 
 
